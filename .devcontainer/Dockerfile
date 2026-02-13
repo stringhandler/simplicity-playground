@@ -1,6 +1,6 @@
 FROM mcr.microsoft.com/devcontainers/base:ubuntu
 
-# Install dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
     git \
@@ -24,7 +24,7 @@ RUN cargo build --release
 RUN cp target/release/simc /usr/local/bin/
 
 # -------------------------------
-# Build hal-simplicity compiler
+# Build hal-simplicity
 # -------------------------------
 WORKDIR /opt
 RUN git clone https://github.com/BlockstreamResearch/hal-simplicity.git
@@ -32,5 +32,14 @@ WORKDIR /opt/hal-simplicity
 RUN cargo build --release
 RUN cp target/release/hal-simplicity /usr/local/bin/
 
-# Set default working directory
+# ----------------
+# Build lwk
+# ----------------
+WORKDIR /opt
+RUN git clone https://github.com/Blockstream/lwk.git
+WORKDIR /opt/lwk
+RUN cargo build --release
+RUN cp target/release/lwk_cli /usr/local/bin/
+
+# Default workspace
 WORKDIR /workspace
