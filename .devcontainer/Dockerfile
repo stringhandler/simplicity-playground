@@ -20,7 +20,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 WORKDIR /opt
 RUN git clone https://github.com/BlockstreamResearch/SimplicityHL.git
 WORKDIR /opt/SimplicityHL
-RUN cargo build --release
+RUN cargo build --release --features "serde"
 RUN cp target/release/simc /usr/local/bin/
 
 # -------------------------------
