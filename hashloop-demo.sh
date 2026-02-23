@@ -184,9 +184,9 @@ WITNESS=$(cat "$TMPDIR"/compiled-with-witness | sed '1,3d; 5,$d')
 
 pause
 
-echo hal-simplicity simplicity pset finalize "$PSET2" 0 "$PROGRAM" "$WITNESS"
-hal-simplicity simplicity pset finalize "$PSET2" 0 "$PROGRAM" "$WITNESS" | jq
-PSET3=$(hal-simplicity simplicity pset finalize "$PSET2" 0 "$PROGRAM" "$WITNESS" | jq -r .pset)
+echo hal-simplicity simplicity pset finalize "$PSET2" 0 "$PROGRAM" "$WITNESS" -a 7369
+hal-simplicity simplicity pset finalize "$PSET2" 0 "$PROGRAM" "$WITNESS" -a 7369 | jq
+PSET3=$(hal-simplicity simplicity pset finalize "$PSET2" 0 "$PROGRAM" "$WITNESS" -a 7369 | jq -r .pset)
 
 pause
 
