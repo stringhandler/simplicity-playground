@@ -1,10 +1,11 @@
 {
-    "name": "Simplicity Playground",
+    "name": "Simplicity Playground (add-annex)",
     "build": {
         "dockerfile": "Dockerfile",
         "args": {
             "SIMPLICITYHL_REPO": "https://github.com/BlockstreamResearch/SimplicityHL.git",
-            "HAL_SIMPLICITY_REPO": "https://github.com/BlockstreamResearch/hal-simplicity.git",
+            "HAL_SIMPLICITY_REPO": "https://github.com/stringhandler/hal-simplicity.git",
+            "HAL_SIMPLICITY_BRANCH": "feat/add-annex",
             "LWK_REPO": "https://github.com/Blockstream/lwk.git"
         }
     },
