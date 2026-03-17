@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Fund and spend an example "hashloop" SimplicityHL contract
+# Fund and spend an example "double-signature" SimplicityHL contract
 # on Liquid Testnet.
 
 # Dependencies: simc hal-simplicity jq curl
@@ -13,20 +13,30 @@
 # a working local copy of elementsd can be useful for other development
 # tasks, but represents a larger time and disk space commitment.
 
-# The hashloop contract hashes bytes 0x00..0xff using a for_while loop,
-# asserts the expected SHA-256 result, and then verifies a single BIP-340
-# signature (witness::ALICE_SIGNATURE). Only 1 signer is needed
-# (contrast with p2ms which required 2 of 3).
+# The double-signature contract verifies two Schnorr signatures for a
+# dual oracle price attestation. Both the oracle and the user must sign
+# a message of the form SHA256(timestamp || price). Both signatures are
+# required to spend the contract (contrast with p2ms which required 2
+# of 3, i.e., a threshold).
+#
+# Note: the contract uses param::ORACLE_PK and param::USER_PK. Before
+# compiling, ensure these params are instantiated with the public keys
+# that correspond to PRIVKEY_ORACLE and PRIVKEY_USER below.
 
-PROGRAM_SOURCE=./hashloop.simf
-WITNESS_FILE=./hashloop.wit
+PROGRAM_SOURCE=./double-signature.simf
+WITNESS_FILE=./double-signature.wit
 
 # This is an unspendable public key address derived from BIP 0341.
 INTERNAL_KEY="50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0"
 TMPDIR=$(mktemp -d)
 
-# Private key of the single party whose signature can approve this transaction.
-PRIVKEY_1="0000000000000000000000000000000000000000000000000000000000000001"
+# Private key of the oracle whose signature is required (witness::ORACLE_SIG).
+# Public key: 79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798
+PRIVKEY_ORACLE="0000000000000000000000000000000000000000000000000000000000000001"
+
+# Private key of the user whose signature is also required (witness::USER_SIG).
+# Public key: c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
+PRIVKEY_USER="0000000000000000000000000000000000000000000000000000000000000002"
 
 
 # Some function definitions.
@@ -94,7 +104,7 @@ DESTINATION_ADDRESS=$(get_unconfidential "$DESTINATION_ADDRESS")
 echo "Using unconfidential version of address: $DESTINATION_ADDRESS"
 echo
 
-show_vars PROGRAM_SOURCE WITNESS_FILE INTERNAL_KEY PRIVKEY_1 DESTINATION_ADDRESS
+show_vars PROGRAM_SOURCE WITNESS_FILE INTERNAL_KEY PRIVKEY_ORACLE PRIVKEY_USER DESTINATION_ADDRESS
 
 pause
 
@@ -129,8 +139,8 @@ pause
 # Ask hal-simplicity to create a minimal PSET which asks to spend the
 # value that the faucet sent to our contract, by sending it to
 # DESTINATION_ADDRESS, less a fee.
-echo hal-simplicity simplicity pset create '[ { "txid": "'"$FAUCET_TRANSACTION"'", "vout": 0 } ]' '[ { "'"$DESTINATION_ADDRESS"'": 0.000900 }, { "fee": 0.000100 } ]'
-PSET1=$(hal-simplicity simplicity pset create '[ { "txid": "'"$FAUCET_TRANSACTION"'", "vout": 0 } ]' '[ { "'"$DESTINATION_ADDRESS"'": 0.000900 }, { "fee": 0.000100 } ]' | jq -r .pset)
+echo hal-simplicity simplicity pset create '[ { "txid": "'"$FAUCET_TRANSACTION"'", "vout": 0 } ]' '[ { "'"$DESTINATION_ADDRESS"'": 0.00099900 }, { "fee": 0.00000100 } ]'
+PSET1=$(hal-simplicity simplicity pset create '[ { "txid": "'"$FAUCET_TRANSACTION"'", "vout": 0 } ]' '[ { "'"$DESTINATION_ADDRESS"'": 0.00099900 }, { "fee": 0.00000100 } ]' | jq -r .pset)
 
 echo "Minimal PSET is $PSET1"
 
@@ -156,24 +166,39 @@ PSET2=$(cat "$TMPDIR"/updated.json | jq -r .pset)
 
 pause
 
-# Signature for the single required signer (witness::ALICE_SIGNATURE).
-echo "Signing on behalf of Alice using private key $PRIVKEY_1"
-echo hal-simplicity simplicity sighash "$PSET2" 0 "$CMR" -x "$PRIVKEY_1"
-hal-simplicity simplicity sighash "$PSET2" 0 "$CMR" -x "$PRIVKEY_1" | jq
-SIGNATURE_1=$(hal-simplicity simplicity sighash "$PSET2" 0 "$CMR" -x "$PRIVKEY_1" | jq -r .signature)
-echo "Alice's signature is $SIGNATURE_1 (different from JSON due to signing nonce)"
+# Both the oracle and the user must sign. We generate each signature
+# independently using their respective private keys.
 
-# Put the signature into the appropriate place in the .wit file
-echo "Copying signature into copy of witness file $WITNESS_FILE..."
+# Oracle signature (witness::ORACLE_SIG)
+echo "Signing on behalf of the Oracle using private key $PRIVKEY_ORACLE"
+echo hal-simplicity simplicity sighash "$PSET2" 0 "$CMR" -x "$PRIVKEY_ORACLE"
+hal-simplicity simplicity sighash "$PSET2" 0 "$CMR" -x "$PRIVKEY_ORACLE" | jq
+ORACLE_SIGNATURE=$(hal-simplicity simplicity sighash "$PSET2" 0 "$CMR" -x "$PRIVKEY_ORACLE" | jq -r .signature)
+echo "Oracle's signature is $ORACLE_SIGNATURE (different from JSON due to signing nonce)"
+
+pause
+
+# User signature (witness::USER_SIG)
+echo "Signing on behalf of the User using private key $PRIVKEY_USER"
+echo hal-simplicity simplicity sighash "$PSET2" 0 "$CMR" -x "$PRIVKEY_USER"
+hal-simplicity simplicity sighash "$PSET2" 0 "$CMR" -x "$PRIVKEY_USER" | jq
+USER_SIGNATURE=$(hal-simplicity simplicity sighash "$PSET2" 0 "$CMR" -x "$PRIVKEY_USER" | jq -r .signature)
+echo "User's signature is $USER_SIGNATURE (different from JSON due to signing nonce)"
+
+# Put the signatures into the appropriate place in the .wit file.
+# Each sed command uses the witness name as an anchor to target only
+# the value line immediately following it.
+echo "Copying signatures into copy of witness file $WITNESS_FILE..."
 cp "$WITNESS_FILE" "$TMPDIR"/witness.wit
-sed -i "s/\"value\": \"0x[0-9a-f]*/\"value\": \"0x$SIGNATURE_1/" "$TMPDIR"/witness.wit
+sed -i '/ORACLE_SIG/{n; s/"value": "0x[^"]*"/"value": "0x'"$ORACLE_SIGNATURE"'"/}' "$TMPDIR"/witness.wit
+sed -i '/USER_SIG/{n; s/"value": "0x[^"]*"/"value": "0x'"$USER_SIGNATURE"'"/}' "$TMPDIR"/witness.wit
 
 echo "Contents of witness:"
 cat "$TMPDIR"/witness.wit
 
 pause
 
-# Recompile with the populated witness file so the signature is embedded.
+# Recompile with the populated witness file so both signatures are embedded.
 echo "Recompiling Simplicity program with attached populated witness file..."
 echo simc "$PROGRAM_SOURCE" -w "$TMPDIR"/witness.wit
 simc "$PROGRAM_SOURCE" -w "$TMPDIR"/witness.wit | tee "$TMPDIR"/compiled-with-witness
@@ -184,12 +209,9 @@ WITNESS=$(cat "$TMPDIR"/compiled-with-witness | sed '1,3d; 5,$d')
 
 pause
 
-# echo hal-simplicity simplicity pset finalize "$PSET2" 0 "$PROGRAM" "$WITNESS" -a 7369
-# hal-simplicity simplicity pset finalize "$PSET2" 0 "$PROGRAM" "$WITNESS" -a 7369 | jq
-# PSET3=$(hal-simplicity simplicity pset finalize "$PSET2" 0 "$PROGRAM" "$WITNESS" -a 7369 | jq -r .pset)
-echo hal-simplicity simplicity pset finalize "$PSET2" 0 "$PROGRAM" "$WITNESS" 
+echo hal-simplicity simplicity pset finalize "$PSET2" 0 "$PROGRAM" "$WITNESS"
 hal-simplicity simplicity pset finalize "$PSET2" 0 "$PROGRAM" "$WITNESS" | jq
-PSET3=$(hal-simplicity simplicity pset finalize "$PSET2" 0 "$PROGRAM" "$WITNESS"  | jq -r .pset)
+PSET3=$(hal-simplicity simplicity pset finalize "$PSET2" 0 "$PROGRAM" "$WITNESS" | jq -r .pset)
 
 pause
 
@@ -211,3 +233,4 @@ echo
 echo "You can view it online at https://blockstream.info/liquidtestnet/tx/$TXID?expand"
 
 echo
+

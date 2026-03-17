@@ -17,6 +17,7 @@ fn hash_counter_16(ctx: Ctx8, unused: (), bytes: u16) -> Either<u256, Ctx8> {
 }
 
 fn main() {
+    padding::<7369>();
     // Hash bytes 0x00 to 0xff
     let ctx: Ctx8 = jet::sha_256_ctx_8_init();
     let out: Either<u256, Ctx8> = for_while::<hash_counter_8>(ctx, ());

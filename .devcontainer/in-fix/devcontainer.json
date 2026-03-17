@@ -1,0 +1,22 @@
+{
+    "name": "Simplicity Playground (in-fix)",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "args": {
+            "SIMPLICITYHL_REPO": "https://github.com/stringhandler/SimplicityHL.git",
+            "SIMPLICITYHL_BRANCH": "feat/in-fix",
+            "HAL_SIMPLICITY_REPO": "https://github.com/BlockstreamResearch/hal-simplicity.git",
+            "HAL_SIMPLICITY_BRANCH": "master",
+            "LWK_REPO": "https://github.com/Blockstream/lwk.git"
+        }
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "rust-lang.rust-analyzer",
+                "Blockstream.simplicityhl"
+            ]
+        }
+    },
+    "postCreateCommand": "chmod +x /usr/local/bin/simc || true"
+}
